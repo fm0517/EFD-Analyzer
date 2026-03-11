@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EFDAnalyzer Viewer</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 18px;
+        }
+        .header a {
+            color: white;
+            text-decoration: none;
+            padding: 8px 15px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 5px;
+        }
+        .container {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 50px);
+        }
+        #drawioContainer {
+            width: 60%;
+            height: 100%;
+            position: relative;
+        }
+        #diagramDiv {
+            width: 100%;
+            height: 100%;
+            background: white;
+        }
+        #diagramDiv iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        #chartPanel {
+            width: 40%;
+            height: 100%;
+            padding: 20px;
+            overflow: auto;
+            background: #f5f5f5;
+            border-left: 2px solid #ddd;
+        }
+        #chartPanel h2 {
+            margin-top: 0;
+            color: #333;
+        }
+        .chart-info {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .chart-info h3 {
+            margin-top: 0;
+            color: #667eea;
+        }
+        .chart-container {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .chart-container img {
+            max-width: 100%;
+            height: auto;
+        }
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
+        .error {
+            color: #d32f2f;
+            background: #ffebee;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .success {
+            color: #388e3c;
+            background: #e8f5e9;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .no-data {
+            color: #888;
+            text-align: center;
+            padding: 40px;
+        }
+        .diagram-info {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .diagram-info h2 {
+            margin-top: 0;
+            color: #333;
+        }
+        .diagram-help {
+            font-size: 14px;
+            color: #666;
+            background: #e8f4f8;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .drawio-link {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 25px;
+            border-radius: 25px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .drawio-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        .manual-input {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .manual-input h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .manual-input input[type="text"] {
+            width: 70%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .manual-input button {
+            background: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .manual-input button:hover {
+            background: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>EFDAnalyzer - Activity Visualization</h1>
+        <a href="/">Upload New Files</a>
+    </div>
+
+    <div class="container">
+        <div id="drawioContainer">
+            <div id="diagramDiv" style="width: 100%; height: 100%;"></div>
+        </div>
+        <div id="chartPanel">
+            <h2>Activity Chart</h2>
+            <div class="manual-input" style="margin-bottom: 20px;">
+                <p>Select a shape in the diagram, or enter activity name:</p>
+                <input type="text" id="activityInput" placeholder="e.g., Arrive At Passenger Terminal" style="width: 65%;" />
+                <button id="viewChartBtn">View Chart</button>
+            </div>
+            <div id="chartContent">
+                <p class="no-data">Click on a shape in the diagram to view its activity data.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load mxgraph from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/mxgraph@4.2.2/dist/mxClient.min.js"></script>
+
+    <script>
+        // Get session ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const sessionId = urlParams.get('session');
+
+        if (!sessionId) {
+            document.getElementById('chartContent').innerHTML =
+                '<div class="error">No session found. Please <a href="/">upload files</a> first.</div>';
+        } else {
+            // Manual input button
+            document.getElementById('viewChartBtn').addEventListener('click', function() {
+                const activityName = document.getElementById('activityInput').value.trim();
+                if (activityName) {
+                    fetchActivityData(activityName);
+                }
+            });
+
+            // Allow Enter key in input field
+            document.getElementById('activityInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    const activityName = this.value.trim();
+                    if (activityName) {
+                        fetchActivityData(activityName);
+                    }
+                }
+            });
+
+            // Load diagram in iframe using draw.io viewer
+            loadDiagram();
+        }
+
+        function loadDiagram() {
+            const diagramDiv = document.getElementById('diagramDiv');
+            const drawioUrl = window.location.origin + '/drawio/' + sessionId;
+
+            // Use official viewer.diagrams.net
+            diagramDiv.innerHTML = '<iframe id="drawioFrame" style="width:100%;height:100%;border:none;"></iframe>';
+            const iframe = document.getElementById('drawioFrame');
+
+            // Load with URL parameter
+            iframe.src = 'https://viewer.diagrams.net/?embed=1&proto=json&spin=1&noExit=1&noSave=1&url=' + encodeURIComponent(drawioUrl);
+
+            // Listen for messages from draw.io
+            window.addEventListener('message', function(event) {
+                try {
+                    const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+
+                    if (data && data.event) {
+                        console.log('Draw.io event:', data.event);
+
+                        // Check for selection events
+                        if (data.event === 'select' || data.event === 'cellClick') {
+                            const cell = data.cell;
+                            let label = '';
+
+                            if (cell) {
+                                if (typeof cell.value === 'string') {
+                                    label = cell.value;
+                                } else if (cell.value && cell.value.getAttribute) {
+                                    label = cell.value.getAttribute('label') || '';
+                                } else if (cell.getAttribute) {
+                                    label = cell.getAttribute('label') || '';
+                                }
+                            }
+
+                            if (label) {
+                                console.log('Selected cell:', label);
+                                document.getElementById('activityInput').value = label;
+                                fetchActivityData(label);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // Ignore parse errors
+                }
+            });
+
+            // Fallback after timeout
+            setTimeout(function() {
+                try {
+                    // Check if iframe loaded properly
+                    if (!iframe.contentWindow || iframe.contentWindow === null) {
+                        showManualInstructions();
+                    }
+                } catch(e) {
+                    showManualInstructions();
+                }
+            }, 8000);
+        }
+
+        function showManualInstructions() {
+            const diagramDiv = document.getElementById('diagramDiv');
+            diagramDiv.innerHTML = '<div style="padding: 30px; text-align: center; background: #f9f9f9; height: 100%;">' +
+                '<div style="background: white; padding: 25px; border-radius: 10px; display: inline-block; text-align: left; max-width: 500px;">' +
+                '<h2 style="margin-top:0;color:#333;">Open Diagram</h2>' +
+                '<p>Due to browser security restrictions, the diagram cannot be displayed here.</p>' +
+                '<p><strong>Please follow these steps:</strong></p>' +
+                '<ol style="line-height:1.8;">' +
+                '<li>Download the diagram file below</li>' +
+                '<li>Go to <a href="https://app.diagrams.net/" target="_blank">draw.io</a></li>' +
+                '<li>Open the downloaded file in draw.io</li>' +
+                '<li>Click on a rectangle (shape) to select it</li>' +
+                '<li>Copy the text and paste in the input box on the right</li>' +
+                '</ol>' +
+                '<a href="/drawio/' + sessionId + '" download class="drawio-link" style="display:inline-block;margin-top:15px;">Download Diagram</a>' +
+                '</div></div>';
+        }
+
+        // Function to fetch activity data from backend
+        async function fetchActivityData(label) {
+            const chartContent = document.getElementById('chartContent');
+            chartContent.innerHTML = '<p class="loading">Processing: "' + label + '"...</p>';
+
+            try {
+                const response = await fetch('/process-data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        session_id: sessionId,
+                        label: label
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    let html = '<div class="chart-info">';
+                    html += '<h3>Selected: ' + data.label + '</h3>';
+                    html += '<p><strong>Activity:</strong> ' + data.activity_name + '</p>';
+                    html += '</div>';
+
+                    if (data.chart_image) {
+                        html += '<div class="chart-container">';
+                        html += '<img src="' + data.chart_image + '" alt="Activity Chart">';
+                        html += '</div>';
+                    }
+
+                    if (data.chart_html) {
+                        html += '<div class="chart-container">';
+                        html += data.chart_html;
+                        html += '</div>';
+                    }
+
+                    chartContent.innerHTML = html;
+                } else {
+                    chartContent.innerHTML = '<div class="error">' + data.message + '</div>';
+                }
+            } catch (error) {
+                chartContent.innerHTML = '<div class="error">Error: ' + error.message + '</div>';
+            }
+        }
+
+        // Export functions for external use
+        window.EFDAnalyzer = {
+            fetchActivityData: fetchActivityData
+        };
+    </script>
+</body>
+</html>
