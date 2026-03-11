@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EFDAnalyzer Web - Upload</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            padding: 40px;
+            max-width: 700px;
+            width: 90%;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .upload-section {
+            margin: 20px 0;
+            padding: 25px;
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            background: #fafafa;
+        }
+        .file-group {
+            margin: 20px 0;
+        }
+        label {
+            font-weight: 600;
+            display: block;
+            margin-bottom: 8px;
+            color: #444;
+        }
+        input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: white;
+        }
+        .file-help {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+        .csv-list {
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+            padding-left: 15px;
+        }
+        .csv-list li {
+            margin: 3px 0;
+        }
+        .csv-file-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .csv-file-list input[type="file"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 40px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            width: 100%;
+            margin-top: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        #result {
+            margin-top: 20px;
+            text-align: center;
+        }
+        .success {
+            color: #4CAF50;
+        }
+        .error {
+            color: #f44336;
+        }
+        .loading {
+            color: #2196F3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>EFDAnalyzer Web</h1>
+        <p class="subtitle">Event-Flow Data Analyzer with draw.io Visualization</p>
+
+        <form id="uploadForm" enctype="multipart/form-data">
+            <div class="upload-section">
+                <div class="file-group">
+                    <label for="drawioFile">draw.io File (.drawio):</label>
+                    <input type="file" id="drawioFile" name="drawioFile" accept=".drawio" required>
+                    <p class="file-help">Select your SingaPort or similar draw.io diagram</p>
+                </div>
+
+                <div class="file-group">
+                    <label>CSV Data Files (6 files required):</label>
+                    <div class="csv-file-list">
+                        <input type="file" name="csvFiles" accept=".csv" required>
+                        <input type="file" name="csvFiles" accept=".csv" required>
+                        <input type="file" name="csvFiles" accept=".csv" required>
+                        <input type="file" name="csvFiles" accept=".csv" required>
+                        <input type="file" name="csvFiles" accept=".csv" required>
+                        <input type="file" name="csvFiles" accept=".csv" required>
+                    </div>
+                    <p class="file-help">Select these 6 CSV files:</p>
+                    <ul class="csv-list">
+                        <li>activity_increase_rates.csv</li>
+                        <li>activity_decrease_rates.csv</li>
+                        <li>activity_average_counts.csv</li>
+                        <li>activity_average_durations.csv</li>
+                        <li>activity_active_average_counts.csv</li>
+                        <li>activity_passive_average_counts.csv</li>
+                    </ul>
+                </div>
+
+                <button type="submit" id="submitBtn">Upload and Analyze</button>
+            </div>
+        </form>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const drawioFile = document.getElementById('drawioFile').files[0];
+            const csvFileInputs = document.querySelectorAll('input[name="csvFiles"]');
+            const submitBtn = document.getElementById('submitBtn');
+            const resultDiv = document.getElementById('result');
+
+            if (!drawioFile) {
+                resultDiv.innerHTML = '<p class="error">Please select a draw.io file</p>';
+                return;
+            }
+
+            // Collect all CSV files from the 6 input fields
+            const csvFiles = [];
+            for (const input of csvFileInputs) {
+                if (input.files.length > 0) {
+                    csvFiles.push(input.files[0]);
+                }
+            }
+
+            if (csvFiles.length < 6) {
+                resultDiv.innerHTML = '<p class="error">Please select all 6 CSV files</p>';
+                return;
+            }
+
+            // Create FormData
+            const formData = new FormData();
+            formData.append('drawioFile', drawioFile);
+            for (let file of csvFiles) {
+                formData.append('csvFiles', file);
+            }
+
+            // Update UI
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Uploading...';
+            resultDiv.innerHTML = '<p class="loading">Uploading files, please wait...</p>';
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    resultDiv.innerHTML = '<p class="success">Upload successful! Redirecting...</p>';
+                    // Redirect to viewer
+                    window.location.href = '/viewer?session=' + data.session_id;
+                } else {
+                    resultDiv.innerHTML = '<p class="error">Error: ' + data.message + '</p>';
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Upload and Analyze';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = '<p class="error">Error: ' + error.message + '</p>';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Upload and Analyze';
+            }
+        });
+    </script>
+</body>
+</html>

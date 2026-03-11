@@ -1,0 +1,17 @@
+# Render.com deployment configuration
+# https://render.com/docs/yaml
+
+services:
+  - type: web
+    name: efd-analyzer
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+    # For static files, you may need to configure a disk
+    # disk:
+    #   name: efd-data
+    #   mountPath: /app/data
+    #   sizeGB: 1
