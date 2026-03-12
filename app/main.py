@@ -263,6 +263,13 @@ async def viewer(session: str):
     """
 
 
+@app.get("/.well-known/appspecific/com.chrome.devtools.json")
+async def chrome_devtools():
+    """Handle Chrome browser probes (harmless, suppresses 404 log)"""
+    from fastapi.responses import Response
+    return Response(status_code=204)
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
