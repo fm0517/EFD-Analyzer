@@ -11,12 +11,28 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 
 # Create app instance
 app = FastAPI(
     title="EFDAnalyzer Web",
     description="Event-Flow Data Analyzer with draw.io visualization",
     version="1.0.0"
+)
+
+# CORS configuration - allow draw.io embed domains and self
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://embed.diagrams.net",
+        "https://viewer.diagrams.net",
+        "https://app.diagrams.net",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Get the base directory (go up two levels from app/main.py)
@@ -261,6 +277,13 @@ async def viewer(session: str):
     </body>
     </html>
     """
+
+
+@app.get("/.well-known/appspecific/com.chrome.devtools.json")
+async def chrome_devtools():
+    """Handle Chrome browser probes (harmless, suppresses 404 log)"""
+    from fastapi.responses import Response
+    return Response(status_code=204)
 
 
 @app.get("/health")

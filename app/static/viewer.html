@@ -5,12 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EFDAnalyzer Viewer</title>
     <style>
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
         body {
-            margin: 0;
-            padding: 0;
+            margin: 0; padding: 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             height: 100vh;
             display: flex;
@@ -23,14 +20,11 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            z-index: 10;
         }
-        .header h1 {
-            margin: 0;
-            font-size: 18px;
-        }
+        .header h1 { margin: 0; font-size: 18px; }
         .header a {
-            color: white;
-            text-decoration: none;
+            color: white; text-decoration: none;
             padding: 8px 15px;
             background: rgba(255,255,255,0.2);
             border-radius: 5px;
@@ -40,21 +34,45 @@
             flex: 1;
             height: calc(100vh - 50px);
         }
+        /* Left panel: draw.io iframe */
         #drawioContainer {
             width: 60%;
             height: 100%;
             position: relative;
+            background: #fafafa;
         }
-        #diagramDiv {
-            width: 100%;
-            height: 100%;
-            background: white;
-        }
-        #diagramDiv iframe {
+        #drawioFrame {
             width: 100%;
             height: 100%;
             border: none;
         }
+        #diagramFallback {
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            display: none;
+        }
+        #loadingOverlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255,255,255,0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 5;
+        }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 4px solid #e0e0e0;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #loadingOverlay p { margin-top: 15px; color: #666; }
+
+        /* Right panel: charts */
         #chartPanel {
             width: 40%;
             height: 100%;
@@ -63,110 +81,64 @@
             background: #f5f5f5;
             border-left: 2px solid #ddd;
         }
-        #chartPanel h2 {
-            margin-top: 0;
-            color: #333;
-        }
+        #chartPanel h2 { margin-top: 0; color: #333; }
         .chart-info {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
+            background: white; padding: 15px;
+            border-radius: 8px; margin-bottom: 20px;
         }
-        .chart-info h3 {
-            margin-top: 0;
-            color: #667eea;
-        }
+        .chart-info h3 { margin-top: 0; color: #667eea; }
         .chart-container {
-            background: white;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 10px 0;
+            background: white; padding: 15px;
+            border-radius: 8px; margin: 10px 0;
         }
-        .chart-container img {
-            max-width: 100%;
-            height: auto;
-        }
-        .loading {
-            color: #666;
-            font-style: italic;
-        }
+        .chart-container img { max-width: 100%; height: auto; }
+        .loading { color: #666; font-style: italic; }
         .error {
-            color: #d32f2f;
-            background: #ffebee;
-            padding: 15px;
-            border-radius: 5px;
+            color: #d32f2f; background: #ffebee;
+            padding: 15px; border-radius: 5px;
         }
         .success {
-            color: #388e3c;
-            background: #e8f5e9;
-            padding: 15px;
-            border-radius: 5px;
+            color: #388e3c; background: #e8f5e9;
+            padding: 15px; border-radius: 5px;
         }
-        .no-data {
-            color: #888;
-            text-align: center;
-            padding: 40px;
-        }
-        .diagram-info {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        .diagram-info h2 {
-            margin-top: 0;
-            color: #333;
-        }
-        .diagram-help {
-            font-size: 14px;
-            color: #666;
-            background: #e8f4f8;
-            padding: 15px;
-            border-radius: 5px;
-            margin-top: 20px;
-        }
-        .drawio-link {
-            display: inline-block;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 12px 25px;
-            border-radius: 25px;
-            text-decoration: none;
-            font-weight: 600;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-        .drawio-link:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
-        }
+        .no-data { color: #888; text-align: center; padding: 40px; }
         .manual-input {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
+            background: white; padding: 15px;
+            border-radius: 8px; margin-bottom: 15px;
         }
-        .manual-input h3 {
-            margin-top: 0;
-            color: #333;
-        }
+        .manual-input p { margin: 0 0 10px 0; font-size: 14px; color: #555; }
         .manual-input input[type="text"] {
-            width: 70%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 14px;
+            width: 65%; padding: 10px;
+            border: 1px solid #ddd; border-radius: 5px; font-size: 14px;
         }
         .manual-input button {
-            background: #4CAF50;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
+            background: #4CAF50; color: white;
+            padding: 10px 20px; border: none;
+            border-radius: 5px; cursor: pointer; font-size: 14px;
         }
-        .manual-input button:hover {
-            background: #45a049;
+        .manual-input button:hover { background: #45a049; }
+        .selected-label {
+            background: #e8f4f8; padding: 10px 15px;
+            border-radius: 5px; margin-bottom: 15px;
+            font-size: 14px; color: #333;
+            display: none;
+        }
+        .selected-label strong { color: #667eea; }
+        /* Fallback button list */
+        .fallback-list {
+            padding: 20px; height: 100%; overflow: auto; background: #f9f9f9;
+        }
+        .fallback-list h3 { margin-top: 0; color: #333; }
+        .fallback-btn {
+            display: block; width: 100%;
+            padding: 12px 15px; margin-bottom: 6px;
+            text-align: left; background: white;
+            border: 1px solid #ddd; border-radius: 5px;
+            cursor: pointer; font-size: 14px;
+            transition: all 0.2s;
+        }
+        .fallback-btn:hover {
+            background: #f0f0f0; border-color: #667eea;
         }
     </style>
 </head>
@@ -177,14 +149,28 @@
     </div>
 
     <div class="container">
+        <!-- Left: Draw.io diagram -->
         <div id="drawioContainer">
-            <div id="diagramDiv" style="width: 100%; height: 100%;"></div>
+            <iframe id="drawioFrame"
+                src="https://embed.diagrams.net/?embed=1&proto=json&spin=1&modified=0&noSaveBtn=1&noExitBtn=1"
+                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                style="display:none;"></iframe>
+            <div id="diagramFallback"></div>
+            <div id="loadingOverlay">
+                <div class="spinner"></div>
+                <p>Loading draw.io editor...</p>
+            </div>
         </div>
+
+        <!-- Right: Charts -->
         <div id="chartPanel">
             <h2>Activity Chart</h2>
-            <div class="manual-input" style="margin-bottom: 20px;">
-                <p>Select a shape in the diagram, or enter activity name:</p>
-                <input type="text" id="activityInput" placeholder="e.g., Arrive At Passenger Terminal" style="width: 65%;" />
+            <div class="selected-label" id="selectedLabel">
+                Diagram selection: <strong id="selectedText"></strong>
+            </div>
+            <div class="manual-input">
+                <p>Click a shape in the diagram, or enter activity name:</p>
+                <input type="text" id="activityInput" placeholder="e.g., Pending, Berthing, Being Idle..." />
                 <button id="viewChartBtn">View Chart</button>
             </div>
             <div id="chartContent">
@@ -193,167 +179,321 @@
         </div>
     </div>
 
-    <!-- Load mxgraph from CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/mxgraph@4.2.2/dist/mxClient.min.js"></script>
-
     <script>
-        // Get session ID from URL
+    (function () {
+        'use strict';
+
+        // ── Config ──────────────────────────────────────────────
+        const ALLOWED_ORIGINS = [
+            'https://embed.diagrams.net',
+            'https://viewer.diagrams.net',
+            'https://app.diagrams.net'
+        ];
+        const IFRAME_LOAD_TIMEOUT = 15000; // ms before fallback
+
+        // ── State ───────────────────────────────────────────────
         const urlParams = new URLSearchParams(window.location.search);
         const sessionId = urlParams.get('session');
+        let drawioReady = false;
+        let xmlContent = null;       // raw drawio XML fetched from server
+        let fallbackActive = false;
 
+        // ── DOM refs ────────────────────────────────────────────
+        const iframe       = document.getElementById('drawioFrame');
+        const fallbackDiv  = document.getElementById('diagramFallback');
+        const loadingDiv   = document.getElementById('loadingOverlay');
+        const chartContent = document.getElementById('chartContent');
+        const activityInput = document.getElementById('activityInput');
+        const selectedLabel = document.getElementById('selectedLabel');
+        const selectedText  = document.getElementById('selectedText');
+
+        // ── Guard: no session ───────────────────────────────────
         if (!sessionId) {
-            document.getElementById('chartContent').innerHTML =
+            chartContent.innerHTML =
                 '<div class="error">No session found. Please <a href="/">upload files</a> first.</div>';
-        } else {
-            // Manual input button
-            document.getElementById('viewChartBtn').addEventListener('click', function() {
-                const activityName = document.getElementById('activityInput').value.trim();
-                if (activityName) {
-                    fetchActivityData(activityName);
-                }
-            });
-
-            // Allow Enter key in input field
-            document.getElementById('activityInput').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    const activityName = this.value.trim();
-                    if (activityName) {
-                        fetchActivityData(activityName);
-                    }
-                }
-            });
-
-            // Load diagram in iframe using draw.io viewer
-            loadDiagram();
+            loadingDiv.innerHTML =
+                '<p style="color:#d32f2f;">No session. <a href="/">Go back</a></p>';
+            return;
         }
 
-        function loadDiagram() {
-            const diagramDiv = document.getElementById('diagramDiv');
-            const drawioUrl = window.location.origin + '/drawio/' + sessionId;
-
-            // Use official viewer.diagrams.net
-            diagramDiv.innerHTML = '<iframe id="drawioFrame" style="width:100%;height:100%;border:none;"></iframe>';
-            const iframe = document.getElementById('drawioFrame');
-
-            // Load with URL parameter
-            iframe.src = 'https://viewer.diagrams.net/?embed=1&proto=json&spin=1&noExit=1&noSave=1&url=' + encodeURIComponent(drawioUrl);
-
-            // Listen for messages from draw.io
-            window.addEventListener('message', function(event) {
-                try {
-                    const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-
-                    if (data && data.event) {
-                        console.log('Draw.io event:', data.event);
-
-                        // Check for selection events
-                        if (data.event === 'select' || data.event === 'cellClick') {
-                            const cell = data.cell;
-                            let label = '';
-
-                            if (cell) {
-                                if (typeof cell.value === 'string') {
-                                    label = cell.value;
-                                } else if (cell.value && cell.value.getAttribute) {
-                                    label = cell.value.getAttribute('label') || '';
-                                } else if (cell.getAttribute) {
-                                    label = cell.getAttribute('label') || '';
-                                }
-                            }
-
-                            if (label) {
-                                console.log('Selected cell:', label);
-                                document.getElementById('activityInput').value = label;
-                                fetchActivityData(label);
-                            }
-                        }
-                    }
-                } catch (e) {
-                    // Ignore parse errors
-                }
+        // ── 1. Fetch drawio XML from our backend ───────────────
+        const drawioUrl = window.location.origin + '/drawio/' + encodeURIComponent(sessionId);
+        fetch(drawioUrl)
+            .then(function (r) { return r.text(); })
+            .then(function (xml) { xmlContent = xml; })
+            .catch(function (err) {
+                console.error('Failed to fetch drawio:', err);
+                activateFallback();
             });
 
-            // Fallback after timeout
-            setTimeout(function() {
-                try {
-                    // Check if iframe loaded properly
-                    if (!iframe.contentWindow || iframe.contentWindow === null) {
-                        showManualInstructions();
-                    }
-                } catch(e) {
-                    showManualInstructions();
-                }
-            }, 8000);
-        }
+        // ── 2. Listen for draw.io postMessage events ───────────
+        window.addEventListener('message', handleDrawioMessage);
 
-        function showManualInstructions() {
-            const diagramDiv = document.getElementById('diagramDiv');
-            diagramDiv.innerHTML = '<div style="padding: 30px; text-align: center; background: #f9f9f9; height: 100%;">' +
-                '<div style="background: white; padding: 25px; border-radius: 10px; display: inline-block; text-align: left; max-width: 500px;">' +
-                '<h2 style="margin-top:0;color:#333;">Open Diagram</h2>' +
-                '<p>Due to browser security restrictions, the diagram cannot be displayed here.</p>' +
-                '<p><strong>Please follow these steps:</strong></p>' +
-                '<ol style="line-height:1.8;">' +
-                '<li>Download the diagram file below</li>' +
-                '<li>Go to <a href="https://app.diagrams.net/" target="_blank">draw.io</a></li>' +
-                '<li>Open the downloaded file in draw.io</li>' +
-                '<li>Click on a rectangle (shape) to select it</li>' +
-                '<li>Copy the text and paste in the input box on the right</li>' +
-                '</ol>' +
-                '<a href="/drawio/' + sessionId + '" download class="drawio-link" style="display:inline-block;margin-top:15px;">Download Diagram</a>' +
-                '</div></div>';
-        }
+        function handleDrawioMessage(event) {
+            // Security: verify origin
+            if (!ALLOWED_ORIGINS.includes(event.origin)) {
+                return; // ignore messages from unknown origins
+            }
 
-        // Function to fetch activity data from backend
-        async function fetchActivityData(label) {
-            const chartContent = document.getElementById('chartContent');
-            chartContent.innerHTML = '<p class="loading">Processing: "' + label + '"...</p>';
-
+            var msg;
             try {
-                const response = await fetch('/process-data', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        session_id: sessionId,
-                        label: label
-                    })
-                });
+                msg = JSON.parse(event.data);
+            } catch (e) {
+                return; // not JSON, ignore
+            }
 
-                const data = await response.json();
+            console.log('[drawio msg]', msg.event || msg.action, msg);
 
-                if (data.success) {
-                    let html = '<div class="chart-info">';
-                    html += '<h3>Selected: ' + data.label + '</h3>';
-                    html += '<p><strong>Activity:</strong> ' + data.activity_name + '</p>';
-                    html += '</div>';
+            switch (msg.event) {
 
-                    if (data.chart_image) {
-                        html += '<div class="chart-container">';
-                        html += '<img src="' + data.chart_image + '" alt="Activity Chart">';
-                        html += '</div>';
+                // draw.io finished loading -> send our XML
+                case 'init':
+                    drawioReady = true;
+                    clearTimeout(fallbackTimer);
+                    if (xmlContent) {
+                        sendLoadCommand();
+                    } else {
+                        // XML not yet fetched; wait a bit then retry
+                        waitForXmlThenLoad();
                     }
+                    break;
 
-                    if (data.chart_html) {
-                        html += '<div class="chart-container">';
-                        html += data.chart_html;
-                        html += '</div>';
-                    }
+                // diagram loaded successfully
+                case 'load':
+                    loadingDiv.style.display = 'none';
+                    iframe.style.display = 'block';
+                    break;
 
-                    chartContent.innerHTML = html;
-                } else {
-                    chartContent.innerHTML = '<div class="error">' + data.message + '</div>';
-                }
-            } catch (error) {
-                chartContent.innerHTML = '<div class="error">Error: ' + error.message + '</div>';
+                // user selected / clicked on cell(s)
+                case 'select':
+                    handleSelection(msg);
+                    break;
+
+                // export callback (if we ever request it)
+                case 'export':
+                    break;
+
+                // save event (we don't need it)
+                case 'save':
+                    break;
             }
         }
 
-        // Export functions for external use
-        window.EFDAnalyzer = {
-            fetchActivityData: fetchActivityData
-        };
+        // Send the load command to draw.io iframe
+        function sendLoadCommand() {
+            iframe.contentWindow.postMessage(JSON.stringify({
+                action: 'load',
+                autosave: 0,
+                xml: xmlContent
+            }), 'https://embed.diagrams.net');
+        }
+
+        // If XML hasn't arrived yet when init fires, poll briefly
+        function waitForXmlThenLoad() {
+            var attempts = 0;
+            var timer = setInterval(function () {
+                attempts++;
+                if (xmlContent) {
+                    clearInterval(timer);
+                    sendLoadCommand();
+                } else if (attempts > 50) { // ~5 seconds
+                    clearInterval(timer);
+                    activateFallback();
+                }
+            }, 100);
+        }
+
+        // ── 3. Handle cell selection ────────────────────────────
+        function handleSelection(msg) {
+            // msg.selected is an array of cell IDs (strings) when proto=json
+            // We need to extract the label from the XML ourselves
+            var selectedIds = msg.selected || [];
+            if (selectedIds.length === 0) {
+                selectedLabel.style.display = 'none';
+                return;
+            }
+
+            // Parse from our cached XML to find labels for selected IDs
+            var label = extractLabelFromXml(selectedIds[0]);
+            if (label) {
+                // Show selection indicator
+                selectedText.textContent = label;
+                selectedLabel.style.display = 'block';
+                activityInput.value = label;
+
+                // Auto-fetch activity data
+                fetchActivityData(label);
+            }
+        }
+
+        // Extract label text from drawio XML by cell ID
+        function extractLabelFromXml(cellId) {
+            if (!xmlContent) return null;
+            var parser = new DOMParser();
+            var xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
+
+            // Search all mxCell and UserObject elements
+            var cells = xmlDoc.querySelectorAll('mxCell, UserObject, object');
+            for (var i = 0; i < cells.length; i++) {
+                var cell = cells[i];
+                if (cell.getAttribute('id') === cellId) {
+                    // value attribute holds the label text
+                    var val = cell.getAttribute('value') || cell.getAttribute('label') || '';
+                    // Strip HTML tags if any
+                    var tmp = document.createElement('div');
+                    tmp.innerHTML = val;
+                    return (tmp.textContent || tmp.innerText || '').trim();
+                }
+            }
+            return null;
+        }
+
+        // ── 4. Fallback: button list from parsed XML ────────────
+        var fallbackTimer = setTimeout(function () {
+            if (!drawioReady) {
+                console.warn('draw.io iframe timed out, activating fallback');
+                activateFallback();
+            }
+        }, IFRAME_LOAD_TIMEOUT);
+
+        function activateFallback() {
+            if (fallbackActive) return;
+            fallbackActive = true;
+            loadingDiv.style.display = 'none';
+            iframe.style.display = 'none';
+            fallbackDiv.style.display = 'block';
+
+            // If we have XML, parse and show buttons
+            if (xmlContent) {
+                showFallbackButtons();
+            } else {
+                // Try fetching again
+                fetch(drawioUrl)
+                    .then(function (r) { return r.text(); })
+                    .then(function (xml) {
+                        xmlContent = xml;
+                        showFallbackButtons();
+                    })
+                    .catch(function () {
+                        fallbackDiv.innerHTML =
+                            '<div style="padding:30px;text-align:center;">' +
+                            '<p>Could not load diagram.</p>' +
+                            '<a href="' + drawioUrl + '" download="diagram.drawio" ' +
+                            'style="color:#667eea;">Download .drawio file</a></div>';
+                    });
+            }
+        }
+
+        function showFallbackButtons() {
+            var parser = new DOMParser();
+            var xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
+            var cells = xmlDoc.getElementsByTagName('mxCell');
+            var labels = [];
+
+            for (var i = 0; i < cells.length; i++) {
+                var cell = cells[i];
+                var value = cell.getAttribute('value');
+                var vertex = cell.getAttribute('vertex');
+                if (value && vertex === '1' && value.trim()) {
+                    labels.push(value.trim());
+                }
+            }
+
+            var unique = [];
+            var seen = {};
+            for (var j = 0; j < labels.length; j++) {
+                if (!seen[labels[j]]) {
+                    seen[labels[j]] = true;
+                    unique.push(labels[j]);
+                }
+            }
+
+            if (unique.length === 0) {
+                fallbackDiv.innerHTML =
+                    '<div style="padding:30px;text-align:center;">' +
+                    '<p>No activity shapes found in diagram.</p>' +
+                    '<a href="' + drawioUrl + '" download="diagram.drawio" ' +
+                    'style="color:#667eea;">Download .drawio file</a></div>';
+                return;
+            }
+
+            var html = '<div class="fallback-list">' +
+                '<h3>Diagram Activities</h3>' +
+                '<p style="color:#666;margin-bottom:15px;font-size:13px;">' +
+                'draw.io iframe could not load. Select an activity below:</p>';
+            for (var k = 0; k < unique.length; k++) {
+                html += '<button class="fallback-btn" data-label="' +
+                    unique[k].replace(/"/g, '&quot;') + '">' +
+                    unique[k] + '</button>';
+            }
+            html += '</div>';
+            fallbackDiv.innerHTML = html;
+
+            // Attach click handlers
+            var btns = fallbackDiv.querySelectorAll('.fallback-btn');
+            for (var b = 0; b < btns.length; b++) {
+                btns[b].addEventListener('click', function () {
+                    var lbl = this.getAttribute('data-label');
+                    activityInput.value = lbl;
+                    fetchActivityData(lbl);
+                });
+            }
+        }
+
+        // ── 5. Manual input ─────────────────────────────────────
+        document.getElementById('viewChartBtn').addEventListener('click', function () {
+            var val = activityInput.value.trim();
+            if (val) fetchActivityData(val);
+        });
+        activityInput.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                var val = activityInput.value.trim();
+                if (val) fetchActivityData(val);
+            }
+        });
+
+        // ── 6. Fetch activity chart from backend ────────────────
+        function fetchActivityData(label) {
+            chartContent.innerHTML =
+                '<p class="loading">Processing: &quot;' + escapeHtml(label) + '&quot;...</p>';
+
+            fetch('/process-data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ session_id: sessionId, label: label })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    var html = '<div class="chart-info">' +
+                        '<h3>Selected: ' + escapeHtml(data.label) + '</h3>' +
+                        '<p><strong>Activity:</strong> ' + escapeHtml(data.activity_name) + '</p>' +
+                        '</div>';
+
+                    if (data.chart_image) {
+                        html += '<div class="chart-container">' +
+                            '<img src="' + data.chart_image + '" alt="Activity Chart">' +
+                            '</div>';
+                    }
+                    chartContent.innerHTML = html;
+                } else {
+                    chartContent.innerHTML = '<div class="error">' + escapeHtml(data.message) + '</div>';
+                }
+            })
+            .catch(function (err) {
+                chartContent.innerHTML = '<div class="error">Error: ' + escapeHtml(err.message) + '</div>';
+            });
+        }
+
+        function escapeHtml(str) {
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(str || ''));
+            return div.innerHTML;
+        }
+
+        // Expose for debugging
+        window.EFDAnalyzer = { fetchActivityData: fetchActivityData };
+    })();
     </script>
 </body>
 </html>
