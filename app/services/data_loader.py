@@ -86,22 +86,32 @@ class DataLoader:
         return days
 
     def get_activity_data(self, activity_name: str) -> dict:
-        """Get data for a specific activity"""
-        if activity_name not in self.increase_rates.columns:
+        """Get data for a specific activity (case-insensitive)"""
+        # Find actual column name (case-preserved)
+        activity_lower = activity_name.lower()
+        actual_column = None
+        for col in self.increase_rates.columns:
+            if col.lower() == activity_lower:
+                actual_column = col
+                break
+
+        if actual_column is None:
             return None
 
         return {
-            'increase': self.increase_rates[activity_name].to_dict() if activity_name in self.increase_rates.columns else {},
-            'decrease': self.decrease_rates[activity_name].to_dict() if activity_name in self.decrease_rates.columns else {},
-            'average': self.average_counts[activity_name].to_dict() if activity_name in self.average_counts.columns else {},
-            'duration': self.average_durations[activity_name].to_dict() if self.has_durations and activity_name in self.average_durations.columns else {}
+            'increase': self.increase_rates[actual_column].to_dict() if actual_column in self.increase_rates.columns else {},
+            'decrease': self.decrease_rates[actual_column].to_dict() if actual_column in self.decrease_rates.columns else {},
+            'average': self.average_counts[actual_column].to_dict() if actual_column in self.average_counts.columns else {},
+            'duration': self.average_durations[actual_column].to_dict() if self.has_durations and actual_column in self.average_durations.columns else {}
         }
 
     def has_activity(self, activity_name: str) -> bool:
-        """Check if an activity exists in the data"""
+        """Check if an activity exists in the data (case-insensitive)"""
         if self.increase_rates is None:
             return False
-        return activity_name in self.increase_rates.columns
+        activity_lower = activity_name.lower()
+        columns_lower = [col.lower() for col in self.increase_rates.columns]
+        return activity_lower in columns_lower
 
     def get_all_activities(self) -> list:
         """Get list of all available activities"""

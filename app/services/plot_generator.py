@@ -32,12 +32,20 @@ class PlotGenerator:
         figsize: tuple = (12, 8)
     ) -> tuple[str, str]:
         """
-        Generate a chart for the specified activity
+        Generate a chart for the specified activity (case-insensitive)
 
         Returns:
             tuple: (base64_image, html_chart)
         """
-        if activity_name not in increase_df.columns:
+        # Find actual column name (case-preserved)
+        activity_lower = activity_name.lower()
+        actual_column = None
+        for col in increase_df.columns:
+            if col.lower() == activity_lower:
+                actual_column = col
+                break
+
+        if actual_column is None:
             raise ValueError(f"Activity '{activity_name}' not found in data")
 
         # Create figure with 2 subplots
@@ -47,7 +55,7 @@ class PlotGenerator:
         # Subplot 1: Increase and Decrease Rates
         ax1.plot(
             increase_df.index,
-            increase_df[activity_name],
+            increase_df[actual_column],
             label="Increase Rate",
             linewidth=2,
             color="#2ecc71",
@@ -55,7 +63,7 @@ class PlotGenerator:
         )
         ax1.plot(
             decrease_df.index,
-            decrease_df[activity_name],
+            decrease_df[actual_column],
             label="Decrease Rate",
             linewidth=2,
             color="#e74c3c",
@@ -68,12 +76,12 @@ class PlotGenerator:
         ax1.grid(True, alpha=0.3, linestyle="--")
 
         # Subplot 2: Average Count and Duration
-        if duration_df is not None and activity_name in duration_df.columns:
+        if duration_df is not None and actual_column in duration_df.columns:
             ax2_twin = ax2.twinx()
 
             line1 = ax2.plot(
                 average_df.index,
-                average_df[activity_name],
+                average_df[actual_column],
                 label="Average Count",
                 linewidth=2,
                 color="#3498db",
@@ -81,7 +89,7 @@ class PlotGenerator:
             )
             line2 = ax2_twin.plot(
                 duration_df.index,
-                duration_df[activity_name],
+                duration_df[actual_column],
                 label="Average Duration (hours)",
                 linewidth=2,
                 color="#9b59b6",
@@ -100,7 +108,7 @@ class PlotGenerator:
         else:
             ax2.plot(
                 average_df.index,
-                average_df[activity_name],
+                average_df[actual_column],
                 label="Average Count",
                 linewidth=2,
                 color="#3498db",
@@ -137,11 +145,22 @@ class PlotGenerator:
         activity_name: str
     ) -> str:
         """Generate a simple HTML chart (fallback)"""
+        # Find actual column name (case-preserved)
+        activity_lower = activity_name.lower()
+        actual_column = None
+        for col in increase_df.columns:
+            if col.lower() == activity_lower:
+                actual_column = col
+                break
+
+        if actual_column is None:
+            return ""
+
         # Get data as lists
         hours = increase_df.index.tolist()
-        increase_data = increase_df[activity_name].tolist()
-        decrease_data = decrease_df[activity_name].tolist()
-        average_data = average_df[activity_name].tolist()
+        increase_data = increase_df[actual_column].tolist()
+        decrease_data = decrease_df[actual_column].tolist()
+        average_data = average_df[actual_column].tolist()
 
         html = f"""
         <div style="font-family: Arial, sans-serif; padding: 10px;">

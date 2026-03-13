@@ -73,8 +73,8 @@ async def process_data(request: ProcessDataRequest):
         else:
             loader = session_data[session_id]
 
-        # Use label directly as activity name
-        activity_name = label
+        # Use label directly as activity name (preprocess: first space -> underscore, remaining spaces removed)
+        activity_name = label.replace(" ", "_", 1).replace(" ", "")
 
         # Check if activity exists in data
         if not loader.has_activity(activity_name):
