@@ -7,7 +7,6 @@ from pydantic import BaseModel
 
 from app.services.data_loader import DataLoader
 from app.services.plot_generator import PlotGenerator
-from app.utils.mapping import ActivityMapping
 
 # Create router
 router = APIRouter()
@@ -16,7 +15,6 @@ router = APIRouter()
 session_data = {}
 
 # Initialize services
-mapping = ActivityMapping()
 plot_generator = PlotGenerator()
 
 
@@ -40,7 +38,7 @@ async def process_data(request: ProcessDataRequest):
     Process click data from draw.io diagram
 
     1. Receive the clicked label text
-    2. Match it to an activity using activity_mapping.txt
+    2. Use label directly as activity name
     3. Generate and return the chart
     """
     try:
@@ -75,15 +73,8 @@ async def process_data(request: ProcessDataRequest):
         else:
             loader = session_data[session_id]
 
-        # Find activity by label
-        activity_name = mapping.find_activity(label)
-
-        if not activity_name:
-            return ProcessDataResponse(
-                success=False,
-                label=label,
-                message=f"No matching activity found for '{label}'. Try clicking on a rectangle with a valid label."
-            )
+        # Use label directly as activity name
+        activity_name = label
 
         # Check if activity exists in data
         if not loader.has_activity(activity_name):
