@@ -34,23 +34,38 @@
             flex: 1;
             height: calc(100vh - 50px);
         }
-        /* Left panel: draw.io iframe */
-        #drawioContainer {
+        /* Left panel: SVG diagram */
+        #svgContainer {
             width: 60%;
             height: 100%;
             position: relative;
             background: #fafafa;
-        }
-        #drawioFrame {
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
-        #diagramFallback {
-            width: 100%;
-            height: 100%;
             overflow: auto;
-            display: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #svgWrapper {
+            padding: 20px;
+        }
+        #svgWrapper svg {
+            max-width: 100%;
+            height: auto;
+            cursor: pointer;
+        }
+        #svgWrapper svg text {
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        #svgWrapper svg text:hover {
+            opacity: 0.7;
+        }
+        #svgWrapper svg .shape {
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        #svgWrapper svg .shape:hover {
+            opacity: 0.8;
         }
         #loadingOverlay {
             position: absolute;
@@ -124,12 +139,12 @@
             display: none;
         }
         .selected-label strong { color: #667eea; }
-        /* Fallback button list */
-        .fallback-list {
+        /* Activity list fallback */
+        .activity-list {
             padding: 20px; height: 100%; overflow: auto; background: #f9f9f9;
         }
-        .fallback-list h3 { margin-top: 0; color: #333; }
-        .fallback-btn {
+        .activity-list h3 { margin-top: 0; color: #333; }
+        .activity-btn {
             display: block; width: 100%;
             padding: 12px 15px; margin-bottom: 6px;
             text-align: left; background: white;
@@ -137,7 +152,7 @@
             cursor: pointer; font-size: 14px;
             transition: all 0.2s;
         }
-        .fallback-btn:hover {
+        .activity-btn:hover {
             background: #f0f0f0; border-color: #667eea;
         }
     </style>
@@ -149,16 +164,12 @@
     </div>
 
     <div class="container">
-        <!-- Left: Draw.io diagram -->
-        <div id="drawioContainer">
-            <iframe id="drawioFrame"
-                src="https://embed.diagrams.net/?embed=1&proto=json&spin=1&modified=0&noSaveBtn=1&noExitBtn=1"
-                sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-                style="display:none;"></iframe>
-            <div id="diagramFallback"></div>
+        <!-- Left: SVG diagram -->
+        <div id="svgContainer">
+            <div id="svgWrapper"></div>
             <div id="loadingOverlay">
                 <div class="spinner"></div>
-                <p>Loading draw.io editor...</p>
+                <p>Loading SVG diagram...</p>
             </div>
         </div>
 
@@ -166,7 +177,7 @@
         <div id="chartPanel">
             <h2>Activity Chart</h2>
             <div class="selected-label" id="selectedLabel">
-                Diagram selection: <strong id="selectedText"></strong>
+                Selected: <strong id="selectedText"></strong>
             </div>
             <div class="manual-input">
                 <p>Click a shape in the diagram, or enter activity name:</p>
@@ -183,29 +194,19 @@
     (function () {
         'use strict';
 
-        // ── Config ──────────────────────────────────────────────
-        const ALLOWED_ORIGINS = [
-            'https://embed.diagrams.net',
-            'https://viewer.diagrams.net',
-            'https://app.diagrams.net'
-        ];
-        const IFRAME_LOAD_TIMEOUT = 15000; // ms before fallback
-
         // ── State ───────────────────────────────────────────────
         const urlParams = new URLSearchParams(window.location.search);
         const sessionId = urlParams.get('session');
-        let drawioReady = false;
-        let xmlContent = null;       // raw drawio XML fetched from server
-        let fallbackActive = false;
+        let svgContent = null;
+        let extractedLabels = [];
 
         // ── DOM refs ────────────────────────────────────────────
-        const iframe       = document.getElementById('drawioFrame');
-        const fallbackDiv  = document.getElementById('diagramFallback');
-        const loadingDiv   = document.getElementById('loadingOverlay');
+        const svgWrapper = document.getElementById('svgWrapper');
+        const loadingDiv = document.getElementById('loadingOverlay');
         const chartContent = document.getElementById('chartContent');
         const activityInput = document.getElementById('activityInput');
         const selectedLabel = document.getElementById('selectedLabel');
-        const selectedText  = document.getElementById('selectedText');
+        const selectedText = document.getElementById('selectedText');
 
         // ── Guard: no session ───────────────────────────────────
         if (!sessionId) {
@@ -216,223 +217,162 @@
             return;
         }
 
-        // ── 1. Fetch drawio XML from our backend ───────────────
-        const drawioUrl = window.location.origin + '/drawio/' + encodeURIComponent(sessionId);
-        fetch(drawioUrl)
-            .then(function (r) { return r.text(); })
-            .then(function (xml) { xmlContent = xml; })
+        // ── 1. Fetch SVG from backend ───────────────────────────
+        const svgUrl = window.location.origin + '/api/svg/' + encodeURIComponent(sessionId);
+        fetch(svgUrl)
+            .then(function (r) {
+                if (!r.ok) throw new Error('SVG not found');
+                return r.json();
+            })
+            .then(function (data) {
+                if (data.error) throw new Error(data.error);
+                svgContent = data.svg;
+                renderSvg();
+            })
             .catch(function (err) {
-                console.error('Failed to fetch drawio:', err);
-                activateFallback();
+                console.error('Failed to fetch SVG:', err);
+                loadingDiv.innerHTML =
+                    '<p style="color:#d32f2f;">Failed to load SVG diagram.<br>' + err.message + '</p>';
+                showActivityListFallback();
             });
 
-        // ── 2. Listen for draw.io postMessage events ───────────
-        window.addEventListener('message', handleDrawioMessage);
+        // ── 2. Render SVG and extract labels ───────────────────
+        function renderSvg() {
+            if (!svgContent) return;
 
-        function handleDrawioMessage(event) {
-            // Security: verify origin
-            if (!ALLOWED_ORIGINS.includes(event.origin)) {
-                return; // ignore messages from unknown origins
-            }
-
-            var msg;
-            try {
-                msg = JSON.parse(event.data);
-            } catch (e) {
-                return; // not JSON, ignore
-            }
-
-            console.log('[drawio msg]', msg.event || msg.action, msg);
-
-            switch (msg.event) {
-
-                // draw.io finished loading -> send our XML
-                case 'init':
-                    drawioReady = true;
-                    clearTimeout(fallbackTimer);
-                    if (xmlContent) {
-                        sendLoadCommand();
-                    } else {
-                        // XML not yet fetched; wait a bit then retry
-                        waitForXmlThenLoad();
-                    }
-                    break;
-
-                // diagram loaded successfully
-                case 'load':
-                    loadingDiv.style.display = 'none';
-                    iframe.style.display = 'block';
-                    break;
-
-                // user selected / clicked on cell(s)
-                case 'select':
-                    handleSelection(msg);
-                    break;
-
-                // export callback (if we ever request it)
-                case 'export':
-                    break;
-
-                // save event (we don't need it)
-                case 'save':
-                    break;
-            }
-        }
-
-        // Send the load command to draw.io iframe
-        function sendLoadCommand() {
-            iframe.contentWindow.postMessage(JSON.stringify({
-                action: 'load',
-                autosave: 0,
-                xml: xmlContent
-            }), 'https://embed.diagrams.net');
-        }
-
-        // If XML hasn't arrived yet when init fires, poll briefly
-        function waitForXmlThenLoad() {
-            var attempts = 0;
-            var timer = setInterval(function () {
-                attempts++;
-                if (xmlContent) {
-                    clearInterval(timer);
-                    sendLoadCommand();
-                } else if (attempts > 50) { // ~5 seconds
-                    clearInterval(timer);
-                    activateFallback();
-                }
-            }, 100);
-        }
-
-        // ── 3. Handle cell selection ────────────────────────────
-        function handleSelection(msg) {
-            // msg.selected is an array of cell IDs (strings) when proto=json
-            // We need to extract the label from the XML ourselves
-            var selectedIds = msg.selected || [];
-            if (selectedIds.length === 0) {
-                selectedLabel.style.display = 'none';
-                return;
-            }
-
-            // Parse from our cached XML to find labels for selected IDs
-            var label = extractLabelFromXml(selectedIds[0]);
-            if (label) {
-                // Show selection indicator
-                selectedText.textContent = label;
-                selectedLabel.style.display = 'block';
-                activityInput.value = label;
-
-                // Auto-fetch activity data
-                fetchActivityData(label);
-            }
-        }
-
-        // Extract label text from drawio XML by cell ID
-        function extractLabelFromXml(cellId) {
-            if (!xmlContent) return null;
-            var parser = new DOMParser();
-            var xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
-
-            // Search all mxCell and UserObject elements
-            var cells = xmlDoc.querySelectorAll('mxCell, UserObject, object');
-            for (var i = 0; i < cells.length; i++) {
-                var cell = cells[i];
-                if (cell.getAttribute('id') === cellId) {
-                    // value attribute holds the label text
-                    var val = cell.getAttribute('value') || cell.getAttribute('label') || '';
-                    // Strip HTML tags if any
-                    var tmp = document.createElement('div');
-                    tmp.innerHTML = val;
-                    return (tmp.textContent || tmp.innerText || '').trim();
-                }
-            }
-            return null;
-        }
-
-        // ── 4. Fallback: button list from parsed XML ────────────
-        var fallbackTimer = setTimeout(function () {
-            if (!drawioReady) {
-                console.warn('draw.io iframe timed out, activating fallback');
-                activateFallback();
-            }
-        }, IFRAME_LOAD_TIMEOUT);
-
-        function activateFallback() {
-            if (fallbackActive) return;
-            fallbackActive = true;
+            // Inject SVG into wrapper
+            svgWrapper.innerHTML = svgContent;
             loadingDiv.style.display = 'none';
-            iframe.style.display = 'none';
-            fallbackDiv.style.display = 'block';
 
-            // If we have XML, parse and show buttons
-            if (xmlContent) {
-                showFallbackButtons();
-            } else {
-                // Try fetching again
-                fetch(drawioUrl)
-                    .then(function (r) { return r.text(); })
-                    .then(function (xml) {
-                        xmlContent = xml;
-                        showFallbackButtons();
-                    })
-                    .catch(function () {
-                        fallbackDiv.innerHTML =
-                            '<div style="padding:30px;text-align:center;">' +
-                            '<p>Could not load diagram.</p>' +
-                            '<a href="' + drawioUrl + '" download="diagram.drawio" ' +
-                            'style="color:#667eea;">Download .drawio file</a></div>';
-                    });
-            }
+            // Extract all text labels from SVG
+            extractLabelsFromSvg();
+
+            // Add click handlers to SVG elements
+            addClickHandlersToSvg();
         }
 
-        function showFallbackButtons() {
-            var parser = new DOMParser();
-            var xmlDoc = parser.parseFromString(xmlContent, 'text/xml');
-            var cells = xmlDoc.getElementsByTagName('mxCell');
-            var labels = [];
+        function extractLabelsFromSvg() {
+            const svg = svgWrapper.querySelector('svg');
+            if (!svg) return;
 
-            for (var i = 0; i < cells.length; i++) {
-                var cell = cells[i];
-                var value = cell.getAttribute('value');
-                var vertex = cell.getAttribute('vertex');
-                if (value && vertex === '1' && value.trim()) {
-                    labels.push(value.trim());
+            const textElements = svg.querySelectorAll('text');
+            extractedLabels = [];
+
+            textElements.forEach(function(textEl) {
+                const label = textEl.textContent.trim();
+                if (label && label.length > 0) {
+                    // Check if this label is already in our list
+                    const exists = extractedLabels.some(function(l) {
+                        return l.text === label;
+                    });
+                    if (!exists) {
+                        extractedLabels.push({
+                            text: label,
+                            element: textEl
+                        });
+                    }
                 }
-            }
+            });
 
-            var unique = [];
-            var seen = {};
-            for (var j = 0; j < labels.length; j++) {
-                if (!seen[labels[j]]) {
-                    seen[labels[j]] = true;
-                    unique.push(labels[j]);
-                }
-            }
+            console.log('Extracted labels:', extractedLabels.map(l => l.text));
+        }
 
-            if (unique.length === 0) {
-                fallbackDiv.innerHTML =
-                    '<div style="padding:30px;text-align:center;">' +
-                    '<p>No activity shapes found in diagram.</p>' +
-                    '<a href="' + drawioUrl + '" download="diagram.drawio" ' +
-                    'style="color:#667eea;">Download .drawio file</a></div>';
-                return;
-            }
+        function addClickHandlersToSvg() {
+            const svg = svgWrapper.querySelector('svg');
+            if (!svg) return;
 
-            var html = '<div class="fallback-list">' +
-                '<h3>Diagram Activities</h3>' +
+            // Add click handler to all text elements
+            const textElements = svg.querySelectorAll('text');
+            textElements.forEach(function(textEl) {
+                textEl.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const label = textEl.textContent.trim();
+                    if (label) {
+                        handleLabelClick(label);
+                    }
+                });
+            });
+
+            // Add click handler to shape elements (paths, rects, etc.)
+            const shapeElements = svg.querySelectorAll('.shape, path, rect, polygon');
+            shapeElements.forEach(function(shapeEl) {
+                shapeEl.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    // Try to find associated text element
+                    const parentG = shapeEl.closest('g');
+                    if (parentG) {
+                        const textEl = parentG.querySelector('text');
+                        if (textEl) {
+                            const label = textEl.textContent.trim();
+                            if (label) {
+                                handleLabelClick(label);
+                                return;
+                            }
+                        }
+                    }
+                    // If no text found, try getting title or id
+                    const label = shapeEl.id || '';
+                    if (label) {
+                        handleLabelClick(label);
+                    }
+                });
+            });
+        }
+
+        // ── 3. Handle label click ────────────────────────────────
+        function handleLabelClick(label) {
+            // Clean up the label (remove extra whitespace)
+            label = label.replace(/\s+/g, ' ').trim();
+
+            if (!label) return;
+
+            // Show selection indicator
+            selectedText.textContent = label;
+            selectedLabel.style.display = 'block';
+            activityInput.value = label;
+
+            // Fetch activity data
+            fetchActivityData(label);
+        }
+
+        // ── 4. Fallback: show activity list ─────────────────────
+        function showActivityListFallback() {
+            // Fetch session info to get activity list
+            fetch('/api/session/' + encodeURIComponent(sessionId))
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.activities && data.activities.length > 0) {
+                        showActivityButtons(data.activities);
+                    } else {
+                        svgWrapper.innerHTML =
+                            '<div style="padding:30px;text-align:center;">' +
+                            '<p>No activities found.</p></div>';
+                    }
+                })
+                .catch(function() {
+                    svgWrapper.innerHTML =
+                        '<div style="padding:30px;text-align:center;">' +
+                        '<p>Could not load diagram.</p></div>';
+                });
+        }
+
+        function showActivityButtons(activities) {
+            var html = '<div class="activity-list">' +
+                '<h3>Available Activities</h3>' +
                 '<p style="color:#666;margin-bottom:15px;font-size:13px;">' +
-                'draw.io iframe could not load. Select an activity below:</p>';
-            for (var k = 0; k < unique.length; k++) {
-                html += '<button class="fallback-btn" data-label="' +
-                    unique[k].replace(/"/g, '&quot;') + '">' +
-                    unique[k] + '</button>';
+                'Select an activity to view its chart:</p>';
+            for (var i = 0; i < activities.length; i++) {
+                html += '<button class="activity-btn" data-label="' +
+                    activities[i].replace(/"/g, '&quot;') + '">' +
+                    activities[i] + '</button>';
             }
             html += '</div>';
-            fallbackDiv.innerHTML = html;
+            svgWrapper.innerHTML = html;
 
             // Attach click handlers
-            var btns = fallbackDiv.querySelectorAll('.fallback-btn');
-            for (var b = 0; b < btns.length; b++) {
-                btns[b].addEventListener('click', function () {
+            var btns = svgWrapper.querySelectorAll('.activity-btn');
+            for (var j = 0; j < btns.length; j++) {
+                btns[j].addEventListener('click', function() {
                     var lbl = this.getAttribute('data-label');
                     activityInput.value = lbl;
                     fetchActivityData(lbl);

@@ -16,20 +16,14 @@ from fastapi.middleware.cors import CORSMiddleware
 # Create app instance
 app = FastAPI(
     title="EFDAnalyzer Web",
-    description="Event-Flow Data Analyzer with draw.io visualization",
+    description="Event-Flow Data Analyzer with SVG visualization",
     version="1.0.0"
 )
 
-# CORS configuration - allow draw.io embed domains and self
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://embed.diagrams.net",
-        "https://viewer.diagrams.net",
-        "https://app.diagrams.net",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -51,7 +45,14 @@ templates = Jinja2Templates(directory=str(STATIC_DIR))
 
 # Include API routes
 from app.routes import api
-app.include_router(api.router)
+app.include_router(api.router, prefix="/api")
+
+# Import drawio to svg converter
+import sys
+from pathlib import Path
+utils_dir = Path(__file__).resolve().parent.parent / "utils"
+sys.path.insert(0, str(utils_dir))
+from DrawioToSvg import convert_drawio_to_svg
 
 # Session storage (in production, use database or redis)
 sessions = {}
@@ -179,6 +180,15 @@ async def upload_files(
         content = await drawioFile.read()
         await f.write(content)
 
+    # Convert drawio to SVG (lightweight approach)
+    svg_filename = drawioFile.filename.replace('.drawio', '.svg')
+    svg_path = session_dir / svg_filename
+    try:
+        convert_drawio_to_svg(str(drawio_path), str(svg_path))
+        print(f"Converted drawio to SVG: {svg_path}")
+    except Exception as e:
+        print(f"Error converting drawio to SVG: {e}")
+
     # Save CSV files
     csv_saved = []
     for csv_file in csvFiles:
@@ -191,6 +201,7 @@ async def upload_files(
     # Store session info
     sessions[session_id] = {
         "drawio_file": str(drawio_path),
+        "svg_file": str(svg_path),
         "csv_files": csv_saved,
         "session_dir": str(session_dir)
     }
@@ -204,31 +215,9 @@ async def upload_files(
     }
 
 
-@app.get("/drawio/{session_id}")
-async def get_drawio_file(session_id: str):
-    """Serve the drawio file for a session"""
-    session_dir = DATA_DIR / session_id
-    if not session_dir.exists():
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    # Find drawio file in session directory
-    drawio_files = list(session_dir.glob("*.drawio"))
-    if not drawio_files:
-        raise HTTPException(status_code=404, detail="Drawio file not found")
-
-    drawio_path = drawio_files[0]
-
-    from fastapi.responses import FileResponse
-    return FileResponse(
-        path=str(drawio_path),
-        filename=drawio_path.name,
-        media_type="application/xml"
-    )
-
-
 @app.get("/viewer", response_class=HTMLResponse)
 async def viewer(session: str):
-    """Viewer page with draw.io iframe"""
+    """Viewer page with SVG diagram"""
     viewer_html = STATIC_DIR / "viewer.html"
     if viewer_html.exists():
         with open(viewer_html, 'r', encoding='utf-8') as f:

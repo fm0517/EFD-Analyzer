@@ -4,6 +4,7 @@ Handle process-data endpoint
 """
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from pathlib import Path
 
 from app.services.data_loader import DataLoader
 from app.services.plot_generator import PlotGenerator
@@ -120,7 +121,24 @@ async def get_session_info(session_id: str):
             "session_id": session_id,
             "activities": loader.get_all_activities()
         }
-    return {"error": "Session not found"}
+
+    # Try to load from disk
+    base_dir = Path(__file__).resolve().parent.parent.parent
+    data_dir = base_dir / "data" / session_id
+
+    if not data_dir.exists():
+        return {"error": "Session not found"}
+
+    # Load session data from disk
+    loader = DataLoader(str(data_dir))
+    if not loader.load_csv_files():
+        return {"error": "Failed to load CSV data files"}
+
+    session_data[session_id] = loader
+    return {
+        "session_id": session_id,
+        "activities": loader.get_all_activities()
+    }
 
 
 @router.delete("/session/{session_id}")
@@ -140,3 +158,27 @@ async def delete_session(session_id: str):
             pass
         return {"success": True}
     return {"error": "Session not found"}
+
+
+@router.get("/svg/{session_id}")
+async def get_svg(session_id: str):
+    """Get the SVG content for a session"""
+    base_dir = Path(__file__).resolve().parent.parent.parent
+    session_dir = base_dir / "data" / session_id
+
+    if not session_dir.exists():
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Find SVG file in session directory
+    svg_files = list(session_dir.glob("*.svg"))
+    if not svg_files:
+        raise HTTPException(status_code=404, detail="SVG file not found")
+
+    svg_path = svg_files[0]
+    with open(svg_path, 'r', encoding='utf-8') as f:
+        svg_content = f.read()
+
+    return {
+        "success": True,
+        "svg": svg_content
+    }
