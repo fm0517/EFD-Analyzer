@@ -28,8 +28,7 @@ class ProcessDataResponse(BaseModel):
     success: bool
     label: str = ""
     activity_name: str = ""
-    chart_image: str = ""
-    chart_html: str = ""
+    chart_data: dict = {}
     message: str = ""
 
 
@@ -86,8 +85,8 @@ async def process_data(request: ProcessDataRequest):
                 message=f"Activity '{activity_name}' not found in the uploaded data."
             )
 
-        # Generate chart
-        chart_image, chart_html = plot_generator.generate_chart(
+        # Generate chart data
+        chart_data = plot_generator.generate_chart(
             loader.increase_rates,
             loader.decrease_rates,
             loader.average_counts,
@@ -99,8 +98,7 @@ async def process_data(request: ProcessDataRequest):
             success=True,
             label=label,
             activity_name=activity_name,
-            chart_image=chart_image,
-            chart_html=chart_html,
+            chart_data=chart_data,
             message="Chart generated successfully"
         )
 
