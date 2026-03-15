@@ -40,19 +40,56 @@
             height: 100%;
             position: relative;
             background: #fafafa;
-            overflow: auto;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            overflow: hidden;
         }
         #svgWrapper {
-            padding: 20px;
+            position: absolute;
+            top: 0;
+            left: 0;
+            transform-origin: 0 0;
+            will-change: transform;
         }
         #svgWrapper svg {
-            max-width: 100%;
-            height: auto;
+            display: block;
             cursor: pointer;
         }
+        /* Zoom controls */
+        .zoom-controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 6;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .zoom-controls button {
+            width: 34px;
+            height: 34px;
+            border: 1px solid #ccc;
+            background: white;
+            border-radius: 5px;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        }
+        .zoom-controls button:hover { background: #f0f0f0; }
+        .zoom-level {
+            position: absolute;
+            top: 10px;
+            left: 50px;
+            z-index: 6;
+            font-size: 12px;
+            color: #666;
+            background: rgba(255,255,255,0.85);
+            padding: 2px 8px;
+            border-radius: 3px;
+        }
+        #svgContainer.grabbing { cursor: grabbing; }
+        #svgContainer:not(.grabbing) { cursor: grab; }
         #svgWrapper svg text {
             cursor: pointer;
             transition: opacity 0.2s;
@@ -166,6 +203,12 @@
     <div class="container">
         <!-- Left: SVG diagram -->
         <div id="svgContainer">
+            <div class="zoom-controls">
+                <button id="zoomInBtn" title="Zoom In">+</button>
+                <button id="zoomOutBtn" title="Zoom Out">&minus;</button>
+                <button id="zoomResetBtn" title="Reset" style="font-size:13px;">&#8634;</button>
+            </div>
+            <span class="zoom-level" id="zoomLevel">100%</span>
             <div id="svgWrapper"></div>
             <div id="loadingOverlay">
                 <div class="spinner"></div>
@@ -236,6 +279,120 @@
                 showActivityListFallback();
             });
 
+        // ── Zoom & Pan state ────────────────────────────────
+        var scale = 1, panX = 0, panY = 0;
+        var isPanning = false, startX = 0, startY = 0;
+        var SCALE_MIN = 0.1, SCALE_MAX = 10, SCALE_STEP = 0.15;
+        var svgContainer = document.getElementById('svgContainer');
+        var zoomLevelEl = document.getElementById('zoomLevel');
+
+        function applyTransform() {
+            svgWrapper.style.transform =
+                'translate(' + panX + 'px,' + panY + 'px) scale(' + scale + ')';
+            zoomLevelEl.textContent = Math.round(scale * 100) + '%';
+        }
+
+        // Wheel zoom
+        svgContainer.addEventListener('wheel', function (e) {
+            e.preventDefault();
+            var rect = svgContainer.getBoundingClientRect();
+            var mouseX = e.clientX - rect.left;
+            var mouseY = e.clientY - rect.top;
+
+            var prevScale = scale;
+            var delta = e.deltaY < 0 ? 1 : -1;
+            scale *= (1 + delta * SCALE_STEP);
+            scale = Math.min(SCALE_MAX, Math.max(SCALE_MIN, scale));
+
+            // Adjust pan so zoom centres on cursor
+            panX = mouseX - (mouseX - panX) * (scale / prevScale);
+            panY = mouseY - (mouseY - panY) * (scale / prevScale);
+            applyTransform();
+        }, { passive: false });
+
+        // Drag to pan
+        svgContainer.addEventListener('mousedown', function (e) {
+            // Only start pan on middle-button or when not clicking interactive SVG text
+            if (e.button === 1 || (e.button === 0 && !e.target.closest('text'))) {
+                isPanning = true;
+                startX = e.clientX - panX;
+                startY = e.clientY - panY;
+                svgContainer.classList.add('grabbing');
+                e.preventDefault();
+            }
+        });
+        window.addEventListener('mousemove', function (e) {
+            if (!isPanning) return;
+            panX = e.clientX - startX;
+            panY = e.clientY - startY;
+            applyTransform();
+        });
+        window.addEventListener('mouseup', function () {
+            if (isPanning) {
+                isPanning = false;
+                svgContainer.classList.remove('grabbing');
+            }
+        });
+
+        // Zoom buttons
+        document.getElementById('zoomInBtn').addEventListener('click', function () {
+            var rect = svgContainer.getBoundingClientRect();
+            var cx = rect.width / 2, cy = rect.height / 2;
+            var prev = scale;
+            scale = Math.min(SCALE_MAX, scale * (1 + SCALE_STEP));
+            panX = cx - (cx - panX) * (scale / prev);
+            panY = cy - (cy - panY) * (scale / prev);
+            applyTransform();
+        });
+        document.getElementById('zoomOutBtn').addEventListener('click', function () {
+            var rect = svgContainer.getBoundingClientRect();
+            var cx = rect.width / 2, cy = rect.height / 2;
+            var prev = scale;
+            scale = Math.max(SCALE_MIN, scale * (1 - SCALE_STEP));
+            panX = cx - (cx - panX) * (scale / prev);
+            panY = cy - (cy - panY) * (scale / prev);
+            applyTransform();
+        });
+        document.getElementById('zoomResetBtn').addEventListener('click', function () {
+            fitSvgToContainer();
+        });
+
+        function fitSvgToContainer() {
+            var svgEl = svgWrapper.querySelector('svg');
+            if (!svgEl) { scale = 1; panX = 0; panY = 0; applyTransform(); return; }
+
+            // Get native SVG dimensions from width/height attributes or viewBox
+            var svgW = parseFloat(svgEl.getAttribute('width'));
+            var svgH = parseFloat(svgEl.getAttribute('height'));
+            if (!svgW || !svgH) {
+                var vb = svgEl.getAttribute('viewBox');
+                if (vb) {
+                    var parts = vb.split(/[\s,]+/);
+                    svgW = parseFloat(parts[2]);
+                    svgH = parseFloat(parts[3]);
+                }
+            }
+            if (!svgW || !svgH) { scale = 1; panX = 0; panY = 0; applyTransform(); return; }
+
+            // Remove fixed width/height so SVG renders at natural size via viewBox
+            svgEl.removeAttribute('width');
+            svgEl.removeAttribute('height');
+            svgEl.style.width = svgW + 'px';
+            svgEl.style.height = svgH + 'px';
+
+            var containerRect = svgContainer.getBoundingClientRect();
+            var cw = containerRect.width;
+            var ch = containerRect.height;
+            var pad = 20;
+
+            // Scale to fit with padding
+            scale = Math.min((cw - pad * 2) / svgW, (ch - pad * 2) / svgH, 1);
+            // Centre the SVG
+            panX = (cw - svgW * scale) / 2;
+            panY = (ch - svgH * scale) / 2;
+            applyTransform();
+        }
+
         // ── 2. Render SVG and extract labels ───────────────────
         function renderSvg() {
             if (!svgContent) return;
@@ -243,6 +400,9 @@
             // Inject SVG into wrapper
             svgWrapper.innerHTML = svgContent;
             loadingDiv.style.display = 'none';
+
+            // Fit SVG into container on initial load
+            fitSvgToContainer();
 
             // Extract all text labels from SVG
             extractLabelsFromSvg();
