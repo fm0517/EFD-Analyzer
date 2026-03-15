@@ -557,7 +557,7 @@
             chartContent.innerHTML =
                 '<p class="loading">Processing: &quot;' + escapeHtml(label) + '&quot;...</p>';
 
-            fetch('/process-data', {
+            fetch('/api/process-data', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ session_id: sessionId, label: label })
