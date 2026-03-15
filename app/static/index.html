@@ -135,15 +135,8 @@
 
                 <div class="file-group">
                     <label>CSV Data Files (6 files required):</label>
-                    <div class="csv-file-list">
-                        <input type="file" name="csvFiles" accept=".csv" required>
-                        <input type="file" name="csvFiles" accept=".csv" required>
-                        <input type="file" name="csvFiles" accept=".csv" required>
-                        <input type="file" name="csvFiles" accept=".csv" required>
-                        <input type="file" name="csvFiles" accept=".csv" required>
-                        <input type="file" name="csvFiles" accept=".csv" required>
-                    </div>
-                    <p class="file-help">Select these 6 CSV files:</p>
+                    <input type="file" id="csvFiles" name="csvFiles" accept=".csv" multiple required>
+                    <p class="file-help">Select these 6 CSV files at once (hold Ctrl to multi-select):</p>
                     <ul class="csv-list">
                         <li>activity_increase_rates.csv</li>
                         <li>activity_decrease_rates.csv</li>
@@ -166,7 +159,7 @@
             e.preventDefault();
 
             const drawioFile = document.getElementById('drawioFile').files[0];
-            const csvFileInputs = document.querySelectorAll('input[name="csvFiles"]');
+            const csvFileInput = document.getElementById('csvFiles');
             const submitBtn = document.getElementById('submitBtn');
             const resultDiv = document.getElementById('result');
 
@@ -175,16 +168,10 @@
                 return;
             }
 
-            // Collect all CSV files from the 6 input fields
-            const csvFiles = [];
-            for (const input of csvFileInputs) {
-                if (input.files.length > 0) {
-                    csvFiles.push(input.files[0]);
-                }
-            }
+            const csvFiles = Array.from(csvFileInput.files);
 
             if (csvFiles.length < 6) {
-                resultDiv.innerHTML = '<p class="error">Please select all 6 CSV files</p>';
+                resultDiv.innerHTML = '<p class="error">Please select all 6 CSV files (currently ' + csvFiles.length + ' selected)</p>';
                 return;
             }
 
